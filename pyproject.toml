@@ -1,0 +1,131 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "infra-steward-gateway"
+version = "0.1.0"
+description = "Law-aware integration governance gateway for regulated AI workflows (Phase 1 prototype)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "Md Helal Uddin", email = "sujon2100@gmail.com"}
+]
+keywords = ["governance", "policy", "integration", "ai", "evidence", "audit"]
+
+dependencies = [
+    "fastapi>=0.104.1",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "prometheus-client>=0.18.0",
+    "httpx>=0.25.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "httpx>=0.25.0",
+    "ruff>=0.1.0",
+    "mypy>=1.6.0",
+]
+
+[project.urls]
+Repository = "https://github.com/sujon2100/infra-steward-gateway"
+Documentation = "https://github.com/sujon2100/infra-steward-gateway/tree/main/docs"
+
+[tool.setuptools]
+packages = ["app", "tests"]
+
+[tool.setuptools.package-data]
+app = ["py.typed"]
+
+# --- Ruff Configuration ---
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [".venv", "build", "dist", ".git"]
+
+[tool.ruff.lint]
+extend-select = [
+    "E",      # pycodestyle errors
+    "F",      # Pyflakes
+    "I",      # isort
+    "N",      # pep8-naming
+    "UP",     # pyupgrade
+    "W",      # pycodestyle warnings
+    "B002",   # Python 3.10+ builtins
+]
+ignore = [
+    "E501",   # line too long (ruff format will handle)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "tests"]
+known-third-party = ["fastapi", "uvicorn", "pydantic", "pytest"]
+
+# --- Mypy Configuration ---
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+check_untyped_defs = true
+
+exclude = [
+    ".venv",
+    "build",
+    "dist",
+    ".git",
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "prometheus_client",
+    "uvicorn",
+]
+ignore_missing_imports = true
+
+# --- Pytest Configuration ---
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+asyncio_mode = "auto"
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--disable-warnings",
+]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "slow: Slow tests (skip with -m 'not slow')",
+]
+
+# --- Coverage Configuration ---
+[tool.coverage.run]
+source = ["app"]
+branch = true
+omit = [
+    ".venv/*",
+    "tests/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
