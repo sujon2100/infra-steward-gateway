@@ -1,0 +1,34 @@
+# Thesis/NIW CI scaffolding examples; not production pipelines
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: python-gateway-ci
+spec:
+  params:
+    - name: repo-url
+      type: string
+    - name: revision
+      type: string
+      default: main
+  workspaces:
+    - name: shared-workspace
+  tasks:
+    - name: clone
+      taskRef:
+        name: git-clone-repo
+      params:
+        - name: repo-url
+          value: $(params.repo-url)
+        - name: revision
+          value: $(params.revision)
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+    - name: build
+      taskRef:
+        name: build-python-gateway
+      runAfter:
+        - clone
+      workspaces:
+        - name: source
+          workspace: shared-workspace

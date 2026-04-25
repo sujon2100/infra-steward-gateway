@@ -1,0 +1,21 @@
+# Thesis/NIW CI scaffolding examples; not production pipelines
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: git-clone-repo
+spec:
+  params:
+    - name: repo-url
+      type: string
+    - name: revision
+      type: string
+      default: main
+  workspaces:
+    - name: source
+  steps:
+    - name: clone
+      image: alpine/git:latest
+      script: |
+        set -e
+        rm -rf /workspace/source/*
+        git clone --branch $(params.revision) $(params.repo-url) /workspace/source

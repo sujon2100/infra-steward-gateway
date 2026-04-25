@@ -1,0 +1,79 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "#000000",
+        "name": "Annotations",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"legend": {"displayMode": "list"}},
+      "targets": [
+        {
+          "expr": "gateway_requests_total",
+          "legendFormat": "tenant={{tenant_id}}, scenario={{scenario}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Gateway Requests by Tenant+Scenario",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+      "id": 2,
+      "options": {"legend": {"displayMode": "list"}},
+      "targets": [
+        {
+          "expr": "gateway_policy_outcomes_total",
+          "legendFormat": "tenant={{tenant_id}}, outcome={{policy_outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Policy Outcomes by Tenant",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "${DS_PROMETHEUS}",
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+      "id": 3,
+      "options": {"legend": {"displayMode": "list"}},
+      "targets": [
+        {
+          "expr": "gateway_provider_outcomes_total",
+          "legendFormat": "tenant={{tenant_id}}, status={{provider_status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Provider Outcomes by Tenant",
+      "type": "timeseries"
+    }
+  ],
+  "schemaVersion": 30,
+  "style": "dark",
+  "tags": ["infra_steward", "observability"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "InfraSteward Governance Observability",
+  "version": 1
+}

@@ -1,0 +1,18 @@
+# Thesis/NIW CI scaffolding examples; not production pipelines
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: build-python-gateway
+spec:
+  workspaces:
+    - name: source
+  steps:
+    - name: test-all
+      image: python:3.12
+      workingDir: /workspace/source
+      script: |
+        set -e
+        pip install -e ".[dev]"
+        pytest tests -q
+        python -m mypy app tests
+        ruff check .

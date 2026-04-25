@@ -1,0 +1,21 @@
+# Thesis/NIW CI scaffolding examples; not production pipelines
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: build-go-ingester
+spec:
+  workspaces:
+    - name: source
+  steps:
+    - name: go-test
+      image: golang:1.22
+      workingDir: /workspace/source/go/evidence_ingester
+      script: |
+        set -e
+        go test ./...
+    - name: go-build
+      image: golang:1.22
+      workingDir: /workspace/source/go/evidence_ingester
+      script: |
+        set -e
+        go build .
