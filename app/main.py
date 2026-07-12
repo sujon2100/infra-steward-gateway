@@ -21,6 +21,7 @@ from app.observability.metrics import (
     gateway_request_latency_seconds,
     gateway_requests_total,
 )
+from app.policy.models import ConsentRecord, PHIExchangeRequest
 from app.workflow.request_metadata import ReportRequest
 from app.workflow.scenarios import ScenarioRunner
 
@@ -203,6 +204,7 @@ evidence_producer = None
 evidence_service = None
 workflow_engine = None
 scenario_runner = None
+phi_exchange_coordinator = None
 
 try:
     from app.evidence.producer import EvidenceProducer
@@ -215,6 +217,7 @@ try:
     from app.tenants.context_manager import TenantContextManager
     from app.workflow.engine import WorkflowEngine
     from app.workflow.events import EventBus
+    from app.workflow.phi_exchange import PHIExchangeCoordinator
 
     evidence_producer = EvidenceProducer(settings)
     evidence_service = EvidenceService(evidence_producer)
@@ -237,12 +240,14 @@ try:
         event_bus=event_bus,
     )
     scenario_runner = ScenarioRunner(workflow_engine)
+    phi_exchange_coordinator = PHIExchangeCoordinator(policy_service, evidence_service, event_bus)
 except Exception:
     policy_service = None
     evidence_producer = None
     evidence_service = None
     workflow_engine = None
     scenario_runner = None
+    phi_exchange_coordinator = None
 
 
 @app.get("/evidence/{request_id}")
@@ -305,6 +310,48 @@ async def scenario_bank_alpha_provider_failure() -> JSONResponse:
         return JSONResponse(status_code=500, content={"error": "Scenario runner not initialized"})
 
     result = await scenario_runner.run_bank_alpha_provider_failure()
+    return JSONResponse(status_code=200, content=result)
+
+
+@app.post("/consents")
+async def register_consent(consent: ConsentRecord) -> JSONResponse:
+    """
+    Register a patient consent record against which future PHI exchange
+    requests are checked. There is no revocation-notification flow, no
+    versioning, and no identity proofing here — this is a policy-input
+    endpoint, not a consent management system.
+    """
+    if policy_service is None:
+        return JSONResponse(status_code=500, content={"error": "Policy service not initialized"})
+
+    policy_service.register_consent(consent)
+    return JSONResponse(
+        status_code=201,
+        content={"status": "registered", "consent_id": consent.consent_id},
+    )
+
+
+@app.post("/phi-exchanges")
+async def submit_phi_exchange(request: PHIExchangeRequest) -> JSONResponse:
+    """
+    Evaluate one HIE disclosure against consent scope and purpose of use,
+    and record the consent basis in the evidence store either way.
+    """
+    if phi_exchange_coordinator is None:
+        return JSONResponse(
+            status_code=500, content={"error": "PHI exchange coordinator not initialized"}
+        )
+
+    result = await phi_exchange_coordinator.process(request)
+    logger.info(
+        "processed phi exchange",
+        extra={
+            "request_id": result["request_id"],
+            "disclosing_org": request.disclosing_org,
+            "receiving_org": request.receiving_org,
+            "allowed": result["decision"]["allowed"],
+        },
+    )
     return JSONResponse(status_code=200, content=result)
 
 
