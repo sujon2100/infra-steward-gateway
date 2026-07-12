@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from app.policy.dsi_models import DSIAdvisoryDecision, DSIAdvisoryRequest, DSISourceAttributes
 from app.policy.models import (
     ConsentRecord,
     OrgType,
@@ -81,11 +82,36 @@ class PolicyService:
     _RESTRICTED_CATEGORIES = {"mental_health", "substance_use"}
     _RESTRICTED_CATEGORY_PURPOSES = {PurposeOfUse.TREATMENT, PurposeOfUse.PATIENT_REQUEST}
 
+    # --- Predictive DSI transparency (HTI-1, 45 CFR 170.315(b)(11)) ---
+    #
+    # Only categories 1-3 (identity/output, purpose, cautioned use) gate
+    # whether a DSI-influenced output can be finalized. Categories 4 and 7
+    # are captured on DSISourceAttributes but not checked here; 5, 6, 8, 9
+    # aren't checked at all in this pass. See docs/dsi_transparency_governance.md.
+    _REQUIRED_DSI_TEXT_FIELDS = (
+        "developer_name",
+        "developer_contact",
+        "funding_source",
+        "output_value_description",
+        "intended_use",
+        "intended_patient_population",
+        "known_risks_and_limitations",
+    )
+    _REQUIRED_DSI_LIST_FIELDS = (
+        "intended_users",
+        "cautioned_out_of_scope_uses",
+    )
+    _REQUIRED_DSI_ENUM_FIELDS = (
+        "output_type",
+        "decision_making_role",
+    )
+
     def __init__(self, policy_suite_version: str = "v1"):
         self.policy_suite_version = policy_suite_version
         self._policies = self._load_policies()
         self._consents: dict[str, ConsentRecord] = {}
         self._hie_participants: dict[str, OrgType] = dict(self._HIE_PARTICIPANTS)
+        self._dsi_registrations: dict[str, DSISourceAttributes] = {}
 
     def _provider_for_tenant(self, tenant_id_lower: str) -> str:
         return self._TENANT_PROVIDER_MAP.get(tenant_id_lower, self.DEFAULT_PROVIDER_NAME)
@@ -291,5 +317,76 @@ class PolicyService:
             phi_categories=sorted(request.categories),
             disclosing_org=request.disclosing_org,
             receiving_org=request.receiving_org,
+            timestamp=datetime.now(UTC),
+        )
+
+    # --- Predictive DSI transparency evaluation ---
+
+    def register_dsi(self, attributes: DSISourceAttributes) -> None:
+        self._dsi_registrations[attributes.dsi_id] = attributes
+
+    def _missing_dsi_attributes(self, attrs: DSISourceAttributes) -> list[str]:
+        missing = []
+        for field in self._REQUIRED_DSI_TEXT_FIELDS:
+            value = getattr(attrs, field)
+            if value is None or not value.strip():
+                missing.append(field)
+        for field in self._REQUIRED_DSI_LIST_FIELDS:
+            values: list[str] = getattr(attrs, field)
+            if not any(v.strip() for v in values):
+                missing.append(field)
+        for field in self._REQUIRED_DSI_ENUM_FIELDS:
+            if getattr(attrs, field) is None:
+                missing.append(field)
+        return missing
+
+    def evaluate_dsi_output(self, request: DSIAdvisoryRequest) -> DSIAdvisoryDecision:
+        """Gate a DSI-influenced output on HTI-1 categories 1-3 being present.
+
+        This does not evaluate the model's accuracy, fairness, or clinical
+        safety - it checks whether the transparency attributes required at
+        the point of use are actually attached to the DSI registration.
+        Those are different problems; this only covers the second one.
+        """
+        attrs = self._dsi_registrations.get(request.dsi_id)
+
+        if attrs is None:
+            return DSIAdvisoryDecision(
+                allowed=False,
+                reason=f"No DSI registration found for dsi_id '{request.dsi_id}'",
+                tenant_id=request.requesting_org,
+                policies_applied=["dsi_registration_lookup"],
+                policy_suite_version=self.policy_suite_version,
+                dsi_id=request.dsi_id,
+                timestamp=datetime.now(UTC),
+            )
+
+        missing = self._missing_dsi_attributes(attrs)
+        if missing:
+            return DSIAdvisoryDecision(
+                allowed=False,
+                reason=(
+                    f"DSI '{request.dsi_id}' is missing required transparency "
+                    f"attributes: {missing}"
+                ),
+                tenant_id=request.requesting_org,
+                policies_applied=["dsi_registration_lookup", "dsi_required_attribute_check"],
+                policy_suite_version=self.policy_suite_version,
+                dsi_id=request.dsi_id,
+                output_type=attrs.output_type,
+                decision_making_role=attrs.decision_making_role,
+                missing_attributes=missing,
+                timestamp=datetime.now(UTC),
+            )
+
+        return DSIAdvisoryDecision(
+            allowed=True,
+            reason="Required transparency attributes (categories 1-3) are present",
+            tenant_id=request.requesting_org,
+            policies_applied=["dsi_registration_lookup", "dsi_required_attribute_check"],
+            policy_suite_version=self.policy_suite_version,
+            dsi_id=request.dsi_id,
+            output_type=attrs.output_type,
+            decision_making_role=attrs.decision_making_role,
             timestamp=datetime.now(UTC),
         )
