@@ -21,6 +21,7 @@ from app.observability.metrics import (
     gateway_request_latency_seconds,
     gateway_requests_total,
 )
+from app.policy.dsi_models import DSIAdvisoryRequest, DSISourceAttributes
 from app.policy.models import ConsentRecord, PHIExchangeRequest
 from app.workflow.request_metadata import ReportRequest
 from app.workflow.scenarios import ScenarioRunner
@@ -205,6 +206,7 @@ evidence_service = None
 workflow_engine = None
 scenario_runner = None
 phi_exchange_coordinator = None
+dsi_advisory_coordinator = None
 
 try:
     from app.evidence.producer import EvidenceProducer
@@ -215,6 +217,7 @@ try:
     from app.providers.stub_b import StubAIProviderB
     from app.supervisory.service import SupervisoryReportingService
     from app.tenants.context_manager import TenantContextManager
+    from app.workflow.dsi_advisory import DSIAdvisoryCoordinator
     from app.workflow.engine import WorkflowEngine
     from app.workflow.events import EventBus
     from app.workflow.phi_exchange import PHIExchangeCoordinator
@@ -241,6 +244,9 @@ try:
     )
     scenario_runner = ScenarioRunner(workflow_engine)
     phi_exchange_coordinator = PHIExchangeCoordinator(policy_service, evidence_service, event_bus)
+    dsi_advisory_coordinator = DSIAdvisoryCoordinator(
+        policy_service, evidence_service, provider_registry, event_bus
+    )
 except Exception:
     policy_service = None
     evidence_producer = None
@@ -248,6 +254,7 @@ except Exception:
     workflow_engine = None
     scenario_runner = None
     phi_exchange_coordinator = None
+    dsi_advisory_coordinator = None
 
 
 @app.get("/evidence/{request_id}")
@@ -349,6 +356,48 @@ async def submit_phi_exchange(request: PHIExchangeRequest) -> JSONResponse:
             "request_id": result["request_id"],
             "disclosing_org": request.disclosing_org,
             "receiving_org": request.receiving_org,
+            "allowed": result["decision"]["allowed"],
+        },
+    )
+    return JSONResponse(status_code=200, content=result)
+
+
+@app.post("/dsi-registrations")
+async def register_dsi(attributes: DSISourceAttributes) -> JSONResponse:
+    """
+    Register a Predictive DSI's HTI-1 source attributes. Registration
+    itself doesn't require categories 1-3 to be filled in - a DSI can be
+    registered incrementally as documentation is produced. The gate is at
+    /dsi-advisories, not here.
+    """
+    if policy_service is None:
+        return JSONResponse(status_code=500, content={"error": "Policy service not initialized"})
+
+    policy_service.register_dsi(attributes)
+    return JSONResponse(
+        status_code=201,
+        content={"status": "registered", "dsi_id": attributes.dsi_id},
+    )
+
+
+@app.post("/dsi-advisories")
+async def submit_dsi_advisory(request: DSIAdvisoryRequest) -> JSONResponse:
+    """
+    Check a Predictive DSI's transparency attributes before generating an
+    advisory output for it, and record the transparency basis either way.
+    """
+    if dsi_advisory_coordinator is None:
+        return JSONResponse(
+            status_code=500, content={"error": "DSI advisory coordinator not initialized"}
+        )
+
+    result = await dsi_advisory_coordinator.process(request)
+    logger.info(
+        "processed dsi advisory",
+        extra={
+            "request_id": result["request_id"],
+            "dsi_id": request.dsi_id,
+            "requesting_org": request.requesting_org,
             "allowed": result["decision"]["allowed"],
         },
     )
