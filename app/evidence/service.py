@@ -54,6 +54,48 @@ class EvidenceService:
         self._store[request_id] = record
         return record
 
+    def start_phi_exchange_record(
+        self,
+        disclosing_org: str,
+        receiving_org: str,
+        consent_id: str,
+        purpose_of_use: str,
+        phi_categories: list[str],
+        policy_suite_version: str | None = None,
+        request_id: str | None = None,
+    ) -> EvidenceRecord:
+        """Same shape as start_record, but seeded with the consent basis
+        up front since a PHI exchange decision needs it before the policy
+        check even runs, not after like the provider fields in the
+        banking flow."""
+        if request_id is None:
+            request_id = str(uuid4())
+        record = EvidenceRecord(
+            request_id=request_id,
+            tenant_id=disclosing_org,
+            policy_suite_version=policy_suite_version,
+            consent_id=consent_id,
+            purpose_of_use=purpose_of_use,
+            phi_categories=phi_categories,
+            disclosing_org=disclosing_org,
+            receiving_org=receiving_org,
+            status="in_progress",
+        )
+        record.events.append(
+            EvidenceEvent(
+                event_type=EvidenceEventType.WORKFLOW_STARTED,
+                details={
+                    "disclosing_org": disclosing_org,
+                    "receiving_org": receiving_org,
+                    "consent_id": consent_id,
+                    "purpose_of_use": purpose_of_use,
+                    "phi_categories": phi_categories,
+                },
+            )
+        )
+        self._store[request_id] = record
+        return record
+
     def add_event(
         self,
         record: EvidenceRecord,

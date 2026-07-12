@@ -18,6 +18,7 @@ class EvidenceEventType(StrEnum):
     PROVIDER_SELECTED = "PROVIDER_SELECTED"
     PROVIDER_FAILED = "PROVIDER_FAILED"
     WORKFLOW_COMPLETED = "WORKFLOW_COMPLETED"
+    CONSENT_EVALUATED = "CONSENT_EVALUATED"
 
 
 class EvidenceEvent(BaseModel):
@@ -45,6 +46,15 @@ class EvidenceRecord(BaseModel):
     output_hash: str | None = None
     events: list[EvidenceEvent] = Field(default_factory=list)
     status: str = "in_progress"
+
+    # Consent basis for a governed PHI exchange (Section 5.1.3 scenario).
+    # Left unset for the non-healthcare workflow, same way jurisdiction and
+    # regime are already optional above.
+    consent_id: str | None = None
+    purpose_of_use: str | None = None
+    phi_categories: list[str] = Field(default_factory=list)
+    disclosing_org: str | None = None
+    receiving_org: str | None = None
 
     class Config:
         frozen = False

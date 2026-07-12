@@ -49,6 +49,7 @@ const (
 	ProviderSelected  EvidenceEventType = "PROVIDER_SELECTED"
 	ProviderFailed    EvidenceEventType = "PROVIDER_FAILED"
 	WorkflowCompleted EvidenceEventType = "WORKFLOW_COMPLETED"
+	ConsentEvaluated  EvidenceEventType = "CONSENT_EVALUATED"
 )
 
 // EvidenceEvent represents an event in the evidence record.
@@ -78,6 +79,13 @@ type EvidenceRecord struct {
 	OutputHash         *string         `json:"output_hash,omitempty"`
 	Events             []EvidenceEvent `json:"events"`
 	Status             string          `json:"status"`
+
+	// Consent basis for a governed PHI exchange; empty for the banking flow.
+	ConsentID     *string  `json:"consent_id,omitempty"`
+	PurposeOfUse  *string  `json:"purpose_of_use,omitempty"`
+	PHICategories []string `json:"phi_categories,omitempty"`
+	DisclosingOrg *string  `json:"disclosing_org,omitempty"`
+	ReceivingOrg  *string  `json:"receiving_org,omitempty"`
 }
 
 // NewEvidenceRecord creates a new evidence record.
