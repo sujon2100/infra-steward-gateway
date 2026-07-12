@@ -18,10 +18,10 @@ Prometheus and Grafana provide observability.
 ```
 app/                          Python gateway (FastAPI)
   tenants/                    TenantContextManager
-  policy/                     PolicyService and decision models
+  policy/                     PolicyService and decision models (banking + HIE/PHI)
   providers/                  AbstractAIProvider, registry, stubs
   supervisory/                Simulated supervisory reporting service
-  workflow/                   Engine, request metadata, event bus
+  workflow/                   Engine, request metadata, event bus, PHI exchange coordinator
   evidence/                   Evidence record service and producer
   observability/              Prometheus metrics
   main.py                     FastAPI entry point
@@ -29,6 +29,8 @@ app/                          Python gateway (FastAPI)
 go/evidence_ingester/         Go ingester (persists evidence asynchronously)
 
 tests/                        Python test suite (pytest)
+evaluation/                   Accuracy and latency evaluation for the PHI policy
+docs/                         Design notes
 ops/observability/            Prometheus + Grafana config
 ops/k8s/                      Kubernetes manifests
 ops/tekton/                   Tekton pipeline for CI
@@ -119,6 +121,17 @@ ruff check app tests
 The Tekton pipeline in `ops/tekton/` runs the same sequence in a clean
 Kubernetes container.
 
+The PHI policy accuracy and latency evaluation in `evaluation/` isn't
+part of that gate — it's a reporting script, not a correctness test
+(though `tests/test_phi_policy_evaluation.py` does assert the accuracy
+dataset stays at zero false positives/negatives). Run it directly:
+
+```bash
+pip install -e ".[dev]"   # pulls in scipy/numpy for the latency stats
+PYTHONPATH=. python evaluation/phi_policy_accuracy.py
+PYTHONPATH=. python evaluation/phi_policy_latency.py
+```
+
 ## Tenants and providers in the prototype
 
 | Tenant         | Jurisdiction | Provider key | Provider class      |
@@ -132,6 +145,46 @@ Kubernetes container.
 reject the `sensitive` and `confidential` report types. Submitting a
 report from a jurisdiction other than a tenant's home jurisdiction is
 denied by the jurisdiction check in `PolicyService`.
+
+## HIPAA PHI exchange governance (HIE scenario)
+
+`feature/hipaa-phi-governance` extends `PolicyService` with a consent-scope
+and purpose-of-use check for a regional Health Information Exchange
+routing PHI between hospitals, clinics, and payers. See
+[`docs/hipaa_phi_governance.md`](docs/hipaa_phi_governance.md) for what's
+implemented versus still conceptual, and `evaluation/` for the accuracy
+and latency evaluation.
+
+Register a consent, then attempt a disclosure against it:
+
+```bash
+curl -X POST http://127.0.0.1:8000/consents \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "consent_id": "demo-consent-1",
+    "patient_id": "demo-patient-1",
+    "granted_categories": ["diagnosis"],
+    "granted_purposes": ["treatment"],
+    "authorized_recipients": ["hie_hospital_north"]
+  }'
+
+curl -X POST http://127.0.0.1:8000/phi-exchanges \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "consent_id": "demo-consent-1",
+    "patient_id": "demo-patient-1",
+    "disclosing_org": "hie_clinic_riverside",
+    "receiving_org": "hie_hospital_north",
+    "categories": ["diagnosis"],
+    "purpose_of_use": "treatment"
+  }'
+```
+
+Registered HIE participants in the prototype: `hie_hospital_north`
+(hospital), `hie_clinic_riverside` (clinic), `hie_payer_horizon` (payer),
+`hie_research_lab` (research org). Org type gates purpose of use
+independently of consent — a payer will never clear a `treatment`
+request, for example, even if a mis-scoped consent record grants it.
 
 ## License
 
