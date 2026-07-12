@@ -96,6 +96,58 @@ class EvidenceService:
         self._store[request_id] = record
         return record
 
+    def start_dsi_advisory_record(
+        self,
+        requesting_org: str,
+        dsi_id: str,
+        encounter_id: str,
+        policy_suite_version: str | None = None,
+        request_id: str | None = None,
+    ) -> EvidenceRecord:
+        """Unlike start_phi_exchange_record, the transparency basis here
+        isn't known until the registration lookup happens inside
+        evaluate_dsi_output - so this only seeds the identifiers, and
+        record_dsi_transparency_basis fills in the rest once the decision
+        comes back."""
+        if request_id is None:
+            request_id = str(uuid4())
+        record = EvidenceRecord(
+            request_id=request_id,
+            tenant_id=requesting_org,
+            report_id=encounter_id,
+            policy_suite_version=policy_suite_version,
+            dsi_id=dsi_id,
+            status="in_progress",
+        )
+        record.events.append(
+            EvidenceEvent(
+                event_type=EvidenceEventType.WORKFLOW_STARTED,
+                details={
+                    "requesting_org": requesting_org,
+                    "dsi_id": dsi_id,
+                    "encounter_id": encounter_id,
+                },
+            )
+        )
+        self._store[request_id] = record
+        return record
+
+    def record_dsi_transparency_basis(
+        self,
+        record: EvidenceRecord,
+        output_type: str | None,
+        decision_making_role: str | None,
+        missing_attributes: list[str],
+    ) -> EvidenceRecord:
+        if record.request_id not in self._store:
+            raise KeyError(f"EvidenceRecord with request_id {record.request_id} not found")
+
+        record.dsi_output_type = output_type
+        record.dsi_decision_making_role = decision_making_role
+        record.dsi_missing_attributes = missing_attributes
+        self._store[record.request_id] = record
+        return record
+
     def add_event(
         self,
         record: EvidenceRecord,

@@ -19,6 +19,7 @@ class EvidenceEventType(StrEnum):
     PROVIDER_FAILED = "PROVIDER_FAILED"
     WORKFLOW_COMPLETED = "WORKFLOW_COMPLETED"
     CONSENT_EVALUATED = "CONSENT_EVALUATED"
+    DSI_TRANSPARENCY_EVALUATED = "DSI_TRANSPARENCY_EVALUATED"
 
 
 class EvidenceEvent(BaseModel):
@@ -55,6 +56,14 @@ class EvidenceRecord(BaseModel):
     phi_categories: list[str] = Field(default_factory=list)
     disclosing_org: str | None = None
     receiving_org: str | None = None
+
+    # Transparency basis for a governed Predictive DSI output (HTI-1,
+    # 45 CFR 170.315(b)(11)). requesting_org reuses tenant_id, same as
+    # disclosing_org does for the PHI exchange path above.
+    dsi_id: str | None = None
+    dsi_output_type: str | None = None
+    dsi_decision_making_role: str | None = None
+    dsi_missing_attributes: list[str] = Field(default_factory=list)
 
     class Config:
         frozen = False

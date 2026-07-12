@@ -44,12 +44,13 @@ func (t EvidenceTimestamp) MarshalJSON() ([]byte, error) {
 type EvidenceEventType string
 
 const (
-	WorkflowStarted   EvidenceEventType = "WORKFLOW_STARTED"
-	PolicyEvaluated   EvidenceEventType = "POLICY_EVALUATED"
-	ProviderSelected  EvidenceEventType = "PROVIDER_SELECTED"
-	ProviderFailed    EvidenceEventType = "PROVIDER_FAILED"
-	WorkflowCompleted EvidenceEventType = "WORKFLOW_COMPLETED"
-	ConsentEvaluated  EvidenceEventType = "CONSENT_EVALUATED"
+	WorkflowStarted          EvidenceEventType = "WORKFLOW_STARTED"
+	PolicyEvaluated          EvidenceEventType = "POLICY_EVALUATED"
+	ProviderSelected         EvidenceEventType = "PROVIDER_SELECTED"
+	ProviderFailed           EvidenceEventType = "PROVIDER_FAILED"
+	WorkflowCompleted        EvidenceEventType = "WORKFLOW_COMPLETED"
+	ConsentEvaluated         EvidenceEventType = "CONSENT_EVALUATED"
+	DSITransparencyEvaluated EvidenceEventType = "DSI_TRANSPARENCY_EVALUATED"
 )
 
 // EvidenceEvent represents an event in the evidence record.
@@ -86,6 +87,13 @@ type EvidenceRecord struct {
 	PHICategories []string `json:"phi_categories,omitempty"`
 	DisclosingOrg *string  `json:"disclosing_org,omitempty"`
 	ReceivingOrg  *string  `json:"receiving_org,omitempty"`
+
+	// DSI transparency basis (HTI-1, 45 CFR 170.315(b)(11)); empty outside
+	// the advisory/predictive-DSI flow.
+	DSIID                 *string  `json:"dsi_id,omitempty"`
+	DSIOutputType         *string  `json:"dsi_output_type,omitempty"`
+	DSIDecisionMakingRole *string  `json:"dsi_decision_making_role,omitempty"`
+	DSIMissingAttributes  []string `json:"dsi_missing_attributes,omitempty"`
 }
 
 // NewEvidenceRecord creates a new evidence record.
