@@ -21,7 +21,7 @@ app/                          Python gateway (FastAPI)
   policy/                     PolicyService and decision models (banking + HIE/PHI)
   providers/                  AbstractAIProvider, registry, stubs
   supervisory/                Simulated supervisory reporting service
-  workflow/                   Engine, request metadata, event bus, PHI exchange coordinator
+  workflow/                   Engine, request metadata, event bus, PHI exchange + DSI advisory coordinators
   evidence/                   Evidence record service and producer
   observability/              Prometheus metrics
   main.py                     FastAPI entry point
@@ -29,7 +29,7 @@ app/                          Python gateway (FastAPI)
 go/evidence_ingester/         Go ingester (persists evidence asynchronously)
 
 tests/                        Python test suite (pytest)
-evaluation/                   Accuracy and latency evaluation for the PHI policy
+evaluation/                   Accuracy and latency evaluation for the PHI + DSI policies
 docs/                         Design notes
 ops/observability/            Prometheus + Grafana config
 ops/k8s/                      Kubernetes manifests
@@ -130,6 +130,7 @@ dataset stays at zero false positives/negatives). Run it directly:
 pip install -e ".[dev]"   # pulls in scipy/numpy for the latency stats
 PYTHONPATH=. python evaluation/phi_policy_accuracy.py
 PYTHONPATH=. python evaluation/phi_policy_latency.py
+PYTHONPATH=. python evaluation/dsi_policy_accuracy.py
 ```
 
 ## Tenants and providers in the prototype
@@ -185,6 +186,55 @@ Registered HIE participants in the prototype: `hie_hospital_north`
 `hie_research_lab` (research org). Org type gates purpose of use
 independently of consent — a payer will never clear a `treatment`
 request, for example, even if a mis-scoped consent record grants it.
+
+## Predictive DSI transparency governance (HTI-1)
+
+`feature/dsi-transparency-governance` (branched off the tip of
+`feature/hipaa-phi-governance`) extends `PolicyService` again, this time
+to gate AI-driven clinical decision support output on the transparency
+attributes ONC/ASTP's HTI-1 rule (45 CFR 170.315(b)(11)) requires for a
+Predictive DSI. See
+[`docs/dsi_transparency_governance.md`](docs/dsi_transparency_governance.md)
+for what's implemented, what's schema-only, and what this deliberately
+doesn't cover (it does not validate whether a model is accurate, fair, or
+safe - only whether the required disclosure attributes are present and
+recorded).
+
+Register a DSI's source attributes, then request an advisory output:
+
+```bash
+curl -X POST http://127.0.0.1:8000/dsi-registrations \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "dsi_id": "sepsis-risk-v3",
+    "model_name": "SepsisRiskScorer",
+    "developer_name": "Acme Clinical AI",
+    "developer_contact": "compliance@acmeclinical.example",
+    "funding_source": "internal R&D",
+    "output_value_description": "48-hour sepsis risk score",
+    "output_type": "prediction",
+    "intended_use": "flag high-risk adult ICU patients for clinician review",
+    "intended_patient_population": "adult ICU patients",
+    "intended_users": ["attending physician", "ICU nurse"],
+    "decision_making_role": "informs",
+    "cautioned_out_of_scope_uses": ["pediatric patients", "outpatient settings"],
+    "known_risks_and_limitations": "reduced sensitivity in patients with chronic renal disease"
+  }'
+
+curl -X POST http://127.0.0.1:8000/dsi-advisories \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "dsi_id": "sepsis-risk-v3",
+    "requesting_org": "hie_hospital_north",
+    "encounter_id": "enc-001",
+    "payload": {"vitals": "stub"}
+  }'
+```
+
+If `sepsis-risk-v3` were registered without, say, `known_risks_and_limitations`,
+the second call would come back with `allowed: false` and a
+`missing_attributes` list - and the underlying provider is never invoked,
+so no advisory output gets generated for a DSI that can't be finalized.
 
 ## License
 
