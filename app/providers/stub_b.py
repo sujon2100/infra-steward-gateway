@@ -10,10 +10,17 @@ from __future__ import annotations
 from typing import Any
 
 from app.providers.base import AbstractAIProvider
+from app.providers.enrichment_class import EnrichmentClass, FallbackStrategy
 from app.workflow.request_metadata import RequestMetadata
 
 
 class StubAIProviderB(AbstractAIProvider):
+    # Class 1 (NARRATIVE) with drop-and-signal fallback, same shape as
+    # StubAIProvider. Kept as a distinct class so the routing decision
+    # is observable in evidence.
+    enrichment_class = EnrichmentClass.NARRATIVE
+    fallback_strategy = FallbackStrategy.DROP_AND_SIGNAL
+
     async def generate_enrichment(
         self,
         metadata: RequestMetadata,

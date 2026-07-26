@@ -17,6 +17,10 @@ class EvidenceEventType(StrEnum):
     POLICY_EVALUATED = "POLICY_EVALUATED"
     PROVIDER_SELECTED = "PROVIDER_SELECTED"
     PROVIDER_FAILED = "PROVIDER_FAILED"
+    # Per-class fallback outcomes: what the engine did after PROVIDER_FAILED,
+    # dispatched from the failed provider's declared fallback strategy.
+    PROVIDER_FALLBACK_APPLIED = "PROVIDER_FALLBACK_APPLIED"
+    PROVIDER_FALLBACK_BLOCKED = "PROVIDER_FALLBACK_BLOCKED"
     WORKFLOW_COMPLETED = "WORKFLOW_COMPLETED"
 
 

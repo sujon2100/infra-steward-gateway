@@ -253,10 +253,91 @@ class WorkflowEngine:
             return response_payload
 
         except Exception as exc:
+            # Provider failed. What happens next depends on the provider's
+            # declared enrichment_class and fallback_strategy, not on a
+            # uniform gateway-wide default. See app/providers/enrichment_class.py.
+            from app.providers.enrichment_class import FallbackStrategy
+
+            provider_class = getattr(selected_provider, "enrichment_class", None)
+            provider_strategy = getattr(
+                selected_provider,
+                "fallback_strategy",
+                FallbackStrategy.DROP_AND_SIGNAL,
+            )
+
             evidence = self.evidence_service.add_event(
                 evidence,
                 EvidenceEventType.PROVIDER_FAILED,
-                {"error": str(exc)},
+                {
+                    "error": str(exc),
+                    "enrichment_class": str(provider_class) if provider_class else None,
+                    "fallback_strategy": str(provider_strategy),
+                },
+            )
+
+            if provider_strategy == FallbackStrategy.FAIL_CLOSED:
+                # Class 2 / Class 4 semantics: the enrichment cannot be
+                # silently omitted, so block the workflow rather than
+                # returning as if it had succeeded.
+                evidence = self.evidence_service.add_event(
+                    evidence,
+                    EvidenceEventType.PROVIDER_FALLBACK_BLOCKED,
+                    {
+                        "reason": (
+                            f"Provider {selected_provider_name} of class "
+                            f"{provider_class} failed; strategy FAIL_CLOSED "
+                            "requires blocking the request rather than "
+                            "silently omitting the enrichment."
+                        ),
+                    },
+                )
+                evidence = await self.evidence_service.finalize(
+                    evidence,
+                    status="blocked_provider_failure",
+                    decision_outcome="provider_failure_blocked",
+                    input_hash=input_hash,
+                    output_hash=None,
+                    provider_name=selected_provider_name,
+                    provider_mode="stub",
+                )
+                await self.event_bus.publish(
+                    "workflow.blocked",
+                    {
+                        "request_id": request_id,
+                        "tenant_id": metadata.tenant_id,
+                        "reason": "provider_failed_fail_closed",
+                        "error": str(exc),
+                    },
+                )
+                gateway_provider_outcomes_total.labels(
+                    tenant_id=metadata.tenant_id,
+                    scenario=metadata.scenario or "unknown",
+                    provider_status="blocked_fail_closed",
+                ).inc()
+                response_payload.update(
+                    {
+                        "provider_used": selected_provider.__class__.__name__,
+                        "status": "blocked_provider_failure",
+                        "result": None,
+                        "error": str(exc),
+                        "fallback_strategy": str(provider_strategy),
+                    }
+                )
+                return response_payload
+
+            # Default: DROP_AND_SIGNAL (Class 1 narrative semantics).
+            # The enrichment is omitted for this request; primary data
+            # flows through unchanged; caller sees status: fallback.
+            evidence = self.evidence_service.add_event(
+                evidence,
+                EvidenceEventType.PROVIDER_FALLBACK_APPLIED,
+                {
+                    "strategy": str(provider_strategy),
+                    "note": (
+                        "Enrichment omitted for this request; primary "
+                        "payload flows through unchanged."
+                    ),
+                },
             )
             evidence = await self.evidence_service.finalize(
                 evidence,
@@ -287,6 +368,7 @@ class WorkflowEngine:
                     "provider_used": selected_provider.__class__.__name__,
                     "status": "fallback",
                     "error": str(exc),
+                    "fallback_strategy": str(provider_strategy),
                 }
             )
             return response_payload
